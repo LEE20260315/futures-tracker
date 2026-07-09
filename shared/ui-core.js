@@ -103,9 +103,18 @@
         if (!items.length) return;
         opts += '<optgroup label="' + exchangeNameMap[ex] + '">';
         items.forEach(function (v) {
-          opts += '<option value="' + FTApp.escapeHtml(v.symbol) + '">' + FTApp.escapeHtml(v.symbol) + '（' + v.category + '）</option>';
+          opts += '<option value="' + FTApp.escapeHtml(v.symbol) + '" data-contract="' + FTApp.escapeHtml(v.defaultContract) + '">' +
+            FTApp.escapeHtml(v.symbol) + '（' + v.category + ' · 主力 ' + v.defaultContract + '）</option>';
         });
         opts += '</optgroup>';
+      });
+      // 合约候选 datalist：每个品种的主力 + 常见月份
+      var dlOpts = '';
+      FTApp.EXCHANGE_VARIETIES.forEach(function (v) {
+        dlOpts += '<option value="' + FTApp.escapeHtml(v.defaultContract) + '">';
+        // 追加近月/远月候选（基于品种 code）
+        var cd = v.code;
+        dlOpts += '<option value="' + cd + '2609"><option value="' + cd + '2610"><option value="' + cd + '2611"><option value="' + cd + '2612"><option value="' + cd + '2601">';
       });
       var modal = document.createElement('div');
       modal.id = 'varietyPickerModal';
@@ -113,9 +122,13 @@
       modal.innerHTML =
         '<div class="modal">' +
           '<h3>添加品种</h3>' +
-          '<div class="form-group"><label>选择品种</label><select id="vpSelect">' + opts + '</select></div>' +
-          '<div class="form-group"><label>自定义品种名（兜底）</label><input type="text" id="vpCustomName" placeholder="列表中找不到时填写"></div>' +
-          '<div class="form-group"><label>自定义合约代码（可选，默认主力）</label><input type="text" id="vpCustomContract" placeholder="如 RB2509"></div>' +
+          '<div class="form-group"><label>选择品种</label><select id="vpSelect" onchange="FTRender.onVarietyPickChange()">' + opts + '</select></div>' +
+          '<div class="form-group"><label>自定义品种名（兜底，列表找不到时填写）</label><input type="text" id="vpCustomName" placeholder="列表中找不到时填写"></div>' +
+          '<div class="form-group"><label>合约代码（默认当前主力，可修改）</label>' +
+            '<input type="text" id="vpCustomContract" list="vpContractList" placeholder="如 RB2609 / SR509" oninput="FTRender.onContractInput()">' +
+            '<datalist id="vpContractList">' + dlOpts + '</datalist>' +
+          '</div>' +
+          '<div id="vpContractHint" class="text-xs" style="min-height:18px;margin-top:4px;color:#908e84"></div>' +
           '<div class="form-actions">' +
             '<button class="bg-surface-elevated text-ink-secondary px-4 py-2 rounded-sm text-sm font-medium border border-edge-subtle hover:bg-surface-hover transition-colors" onclick="FTRender.closeVarietyPicker()">取消</button>' +
             '<button class="bg-brand-500 text-brand-50 px-4 py-2 rounded-sm text-sm font-medium hover:bg-brand-600 transition-colors" onclick="FTRender.confirmAddVariety()">添加</button>' +
@@ -124,13 +137,47 @@
       document.body.appendChild(modal);
     },
 
+    // 品种选择变化：自动回填当前主力合约 + 实时校验
+    onVarietyPickChange: function () {
+      var sel = el('vpSelect');
+      var inp = el('vpCustomContract');
+      if (!sel || !inp) return;
+      if (sel.value) {
+        var meta = FTApp.findVarietyMeta(sel.value);
+        if (meta) inp.value = meta.defaultContract;
+      }
+      this.onContractInput();
+    },
+
+    // 合约输入实时校验提示（红/黄/绿三色反馈）
+    onContractInput: function () {
+      var sel = el('vpSelect');
+      var inp = el('vpCustomContract');
+      var hint = el('vpContractHint');
+      if (!inp || !hint) return;
+      var sym = (sel && sel.value) ? sel.value : ((el('vpCustomName') || {}).value || '').trim();
+      var code = inp.value.trim();
+      if (!code) {
+        hint.innerHTML = '<span style="color:#908e84">留空将使用品种默认主力合约</span>';
+        return;
+      }
+      var r = FTApp.validateContract(code, sym);
+      if (r.level === 'error') {
+        hint.innerHTML = '<span style="color:#ef4444">' + FTApp.escapeHtml(r.warning) + '</span>';
+      } else if (r.level === 'warn') {
+        hint.innerHTML = '<span style="color:#e08d6f">' + FTApp.escapeHtml(r.warning) + '</span>';
+      } else {
+        hint.innerHTML = '<span style="color:#8ca06f">✓ 合约格式正确</span>';
+      }
+    },
+
     // 关闭品种选择器
     closeVarietyPicker: function () {
       var m = el('varietyPickerModal');
       if (m) m.remove();
     },
 
-    // 确认添加品种
+    // 确认添加品种（集成合约纠错：无效阻止添加，警告允许但提示）
     confirmAddVariety: function () {
       var sel = el('vpSelect');
       var customName = (el('vpCustomName') || {}).value || '';
@@ -141,29 +188,27 @@
       if (sel && sel.value) {
         var meta = FTApp.findVarietyMeta(sel.value);
         if (meta) {
-          // 如果用户填了自定义合约，验证格式
-          if (customContract) {
-            var v = FTApp.validateContract(customContract, meta.symbol);
-            if (!v.valid) { FTApp.showToast(v.warning); return; }
-            if (v.warning) { FTApp.showToast(v.warning); } // 过期警告但允许添加
-          }
+          // 用户填写的合约优先，留空则用品种默认主力合约
+          var cc = customContract || meta.defaultContract;
+          var vr = FTApp.validateContract(cc, meta.symbol);
+          if (!vr.valid) { FTApp.showToast(vr.warning); return; }
           entry = {
-            symbol: meta.symbol, contractCode: customContract || meta.defaultContract, multiplier: meta.multiplier,
+            symbol: meta.symbol, contractCode: cc.toUpperCase(), multiplier: meta.multiplier,
             marginRate: meta.marginRate, price: 0, percentile: 0, costLine: 0, status: 'bottom',
             category: meta.category, exchange: meta.exchange
           };
+          if (vr.level === 'warn') FTApp.showToast(vr.warning);
         }
       } else if (customName) {
-        // 自定义品种：验证合约（如果有）
-        if (customContract) {
-          var v2 = FTApp.validateContract(customContract, customName);
-          if (!v2.valid) { FTApp.showToast(v2.warning); return; }
-          if (v2.warning) { FTApp.showToast(v2.warning); }
-        }
+        // 自定义品种必须填写合约代码，不再硬编码 '0'
+        if (!customContract) { FTApp.showToast('请填写合约代码（如 RB2609）'); return; }
+        var vr2 = FTApp.validateContract(customContract, customName);
+        if (!vr2.valid) { FTApp.showToast(vr2.warning); return; }
         entry = {
-          symbol: customName, contractCode: customContract || '0', multiplier: 10, marginRate: 0.08,
+          symbol: customName, contractCode: customContract.toUpperCase(), multiplier: 10, marginRate: 0.08,
           price: 0, percentile: 0, costLine: 0, status: 'bottom', category: '能源化工', exchange: ''
         };
+        if (vr2.level === 'warn') FTApp.showToast(vr2.warning);
       } else {
         FTApp.showToast('请选择或输入品种');
         return;
@@ -176,7 +221,7 @@
       FTApp.saveState();
       this.renderPool();
       this.closeVarietyPicker();
-      FTApp.showToast('已添加 ' + entry.symbol);
+      FTApp.showToast('已添加 ' + entry.symbol + ' (' + entry.contractCode + ')');
     },
 
     // ============ 4. 删除观察池行 ============
@@ -187,32 +232,31 @@
       FTApp.showToast('已删除 ' + symbol);
     },
 
-    // ============ 5. 保存观察池（回写表格内输入 + 合约验证） ============
+    // ============ 5. 保存观察池（回写表格内输入 + 合约纠错视觉反馈） ============
     savePool: function () {
       var body = el('poolBody');
       if (!body) return;
       var findBySym = function (sym) { return FTApp.state.pool.find(function (x) { return x.symbol === sym; }); };
-      var warnings = [];
+      var errorCount = 0, warnCount = 0;
       body.querySelectorAll('.contract-input').forEach(function (inp) {
         var c = findBySym(inp.dataset.symbol);
-        if (c) {
-          var newCode = inp.value.trim();
-          // 合约纠错
-          if (newCode) {
-            var v = FTApp.validateContract(newCode, c.symbol);
-            if (!v.valid) {
-              FTApp.showToast(c.symbol + ': ' + v.warning);
-              inp.style.borderColor = '#ef4444';
-              return;
-            }
-            if (v.warning) {
-              warnings.push(c.symbol + ': ' + v.warning);
-              inp.style.borderColor = '#fdd835';
-            } else {
-              inp.style.borderColor = '';
-            }
+        if (!c) return;
+        var newCode = inp.value.trim();
+        inp.style.borderColor = '';
+        inp.style.borderWidth = '';
+        var vr = FTApp.validateContract(newCode, c.symbol);
+        if (!vr.valid) {
+          // 无效合约：保留旧值，红色边框标识
+          inp.style.borderColor = '#ef4444';
+          inp.style.borderWidth = '2px';
+          errorCount++;
+        } else {
+          c.contractCode = newCode.toUpperCase();
+          if (vr.level === 'warn') {
+            inp.style.borderColor = '#e08d6f';
+            inp.style.borderWidth = '2px';
+            warnCount++;
           }
-          c.contractCode = newCode;
         }
       });
       body.querySelectorAll('.mult-input').forEach(function (inp) {
@@ -225,9 +269,10 @@
         var c = findBySym(inp.dataset.symbol); if (c) c.costLine = +inp.value || 0;
       });
       FTApp.saveState();
-      if (warnings.length) {
-        FTApp.showToast('已保存，' + warnings.length + ' 个合约有警告（见输入框边框）');
-        console.log('[FT] 合约警告:', warnings);
+      if (errorCount > 0) {
+        FTApp.showToast('✗ ' + errorCount + ' 个合约无效已保留旧值（红框）' + (warnCount > 0 ? '，' + warnCount + ' 个警告（黄框）' : ''));
+      } else if (warnCount > 0) {
+        FTApp.showToast('⚠ ' + warnCount + ' 个合约有警告（黄框），已保存');
       } else {
         FTApp.showToast('观察池已保存');
       }
