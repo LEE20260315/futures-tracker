@@ -3,7 +3,7 @@
 // auto-refresh, theme toggle, backup/import/export, and init function.
 
 // ============ VERSION ============
-const APP_VERSION = '2026.07.09-v7';
+const APP_VERSION = '2026.07.09-v8';
 
 // ============ DATA STORE ============
 // 交易所分类品种主数据：覆盖国内五大期货交易所
@@ -33,20 +33,20 @@ const EXCHANGE_VARIETIES = [
   {exchange:'DCE',exchangeName:'大连商品交易所',category:'能源化工',symbol:'聚丙烯PP',code:'PP',multiplier:5,marginRate:0.08,defaultContract:'PP2609'},
   {exchange:'DCE',exchangeName:'大连商品交易所',category:'能源化工',symbol:'塑料LLDPE',code:'L',multiplier:5,marginRate:0.08,defaultContract:'L2609'},
   {exchange:'DCE',exchangeName:'大连商品交易所',category:'能源化工',symbol:'乙二醇',code:'EG',multiplier:10,marginRate:0.08,defaultContract:'EG2609'},
-  // 郑州商品交易所 (CZCE) — 新浪连续代码 XX0 用于手动价格查询
-  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'农产品',symbol:'白糖',code:'SR',multiplier:10,marginRate:0.08,defaultContract:'SR509'},
-  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'农产品',symbol:'棉花',code:'CF',multiplier:5,marginRate:0.08,defaultContract:'CF509'},
-  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'农产品',symbol:'苹果',code:'AP',multiplier:10,marginRate:0.10,defaultContract:'AP510'},
-  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'能源化工',symbol:'甲醇',code:'MA',multiplier:10,marginRate:0.08,defaultContract:'MA509'},
-  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'能源化工',symbol:'玻璃',code:'FG',multiplier:20,marginRate:0.08,defaultContract:'FG509'},
-  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'能源化工',symbol:'纯碱',code:'SA',multiplier:20,marginRate:0.08,defaultContract:'SA509'},
-  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'能源化工',symbol:'尿素',code:'UR',multiplier:20,marginRate:0.08,defaultContract:'UR509'},
-  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'能源化工',symbol:'烧碱',code:'SH',multiplier:30,marginRate:0.08,defaultContract:'SH509'},
-  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'能源化工',symbol:'PTA',code:'TA',multiplier:5,marginRate:0.08,defaultContract:'TA509'},
-  // 广州期货交易所 (GFEX)
-  {exchange:'GFEX',exchangeName:'广州期货交易所',category:'新能源',symbol:'多晶硅',code:'PS',multiplier:3,marginRate:0.12,defaultContract:'PS2509'},
-  {exchange:'GFEX',exchangeName:'广州期货交易所',category:'新能源',symbol:'工业硅',code:'SI',multiplier:5,marginRate:0.12,defaultContract:'SI2509'},
-  {exchange:'GFEX',exchangeName:'广州期货交易所',category:'新能源',symbol:'碳酸锂',code:'LC',multiplier:1,marginRate:0.15,defaultContract:'LC2511'},
+  // 郑州商品交易所 (CZCE) — 3位数字格式：年份末位+月份（SR609=2026年9月）
+  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'农产品',symbol:'白糖',code:'SR',multiplier:10,marginRate:0.08,defaultContract:'SR609'},
+  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'农产品',symbol:'棉花',code:'CF',multiplier:5,marginRate:0.08,defaultContract:'CF609'},
+  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'农产品',symbol:'苹果',code:'AP',multiplier:10,marginRate:0.10,defaultContract:'AP610'},
+  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'能源化工',symbol:'甲醇',code:'MA',multiplier:10,marginRate:0.08,defaultContract:'MA609'},
+  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'能源化工',symbol:'玻璃',code:'FG',multiplier:20,marginRate:0.08,defaultContract:'FG609'},
+  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'能源化工',symbol:'纯碱',code:'SA',multiplier:20,marginRate:0.08,defaultContract:'SA609'},
+  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'能源化工',symbol:'尿素',code:'UR',multiplier:20,marginRate:0.08,defaultContract:'UR609'},
+  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'能源化工',symbol:'烧碱',code:'SH',multiplier:30,marginRate:0.08,defaultContract:'SH609'},
+  {exchange:'CZCE',exchangeName:'郑州商品交易所',category:'能源化工',symbol:'PTA',code:'TA',multiplier:5,marginRate:0.08,defaultContract:'TA609'},
+  // 广州期货交易所 (GFEX) — 4位数字格式
+  {exchange:'GFEX',exchangeName:'广州期货交易所',category:'新能源',symbol:'多晶硅',code:'PS',multiplier:3,marginRate:0.12,defaultContract:'PS2609'},
+  {exchange:'GFEX',exchangeName:'广州期货交易所',category:'新能源',symbol:'工业硅',code:'SI',multiplier:5,marginRate:0.12,defaultContract:'SI2609'},
+  {exchange:'GFEX',exchangeName:'广州期货交易所',category:'新能源',symbol:'碳酸锂',code:'LC',multiplier:1,marginRate:0.15,defaultContract:'LC2611'},
   // 中国金融期货交易所 (CFFEX)
   {exchange:'CFFEX',exchangeName:'中国金融期货交易所',category:'股指',symbol:'沪深300',code:'IF',multiplier:300,marginRate:0.12,defaultContract:'IF2608'},
   {exchange:'CFFEX',exchangeName:'中国金融期货交易所',category:'股指',symbol:'上证50',code:'IH',multiplier:300,marginRate:0.12,defaultContract:'IH2608'},
@@ -81,14 +81,20 @@ function validateContract(contractCode, varietySymbol) {
   const code = contractCode.trim().toUpperCase();
   // 主力连续合约（如 P0, RB0, CU0）— 数据源虚拟代码，允许但提示
   if (/^[A-Z]+0$/.test(code)) return { valid: true, warning: '⚠ ' + code + ' 是主力连续（虚拟代码），建议使用真实月份合约如 ' + code.replace('0','2609'), level: 'warn' };
-  // CZCE 3位数字格式（如 SR509 = 2025年9月）
+  // CZCE 3位数字格式（如 SR609 = 2026年9月，年份用末位）
   const m3 = code.match(/^([A-Z]+)(\d)(\d{2})$/);
   // 4位数字格式（如 RB2609）
   const m4 = code.match(/^([A-Z]+)(\d{4})$/);
-  let prefix, yearPart, monthPart;
-  if (m4) { prefix = m4[1]; yearPart = m4[2].substring(0,2); monthPart = m4[2].substring(2,4); }
-  else if (m3) { prefix = m3[1]; yearPart = m3[2]; monthPart = m3[3]; }
-  else return { valid: false, warning: '合约格式不正确，应为字母+月份（如 RB2609）或主力连续（如 RB0）', level: 'error' };
+  let prefix, yearPart, monthPart, contractYear;
+  if (m4) {
+    prefix = m4[1]; yearPart = m4[2].substring(0,2); monthPart = m4[2].substring(2,4);
+    contractYear = 2000 + parseInt(yearPart);  // '26'→2026
+  } else if (m3) {
+    prefix = m3[1]; yearPart = m3[2]; monthPart = m3[3];
+    contractYear = 2020 + parseInt(yearPart);  // CZCE 末位年份：'6'→2026, '5'→2025
+  } else {
+    return { valid: false, warning: '合约格式不正确，应为字母+月份（如 RB2609）或主力连续（如 RB0）', level: 'error' };
+  }
   // 检查品种前缀是否匹配
   const meta = findVarietyMeta(varietySymbol);
   if (meta && prefix !== meta.code.toUpperCase()) {
@@ -101,7 +107,6 @@ function validateContract(contractCode, varietySymbol) {
   const now = new Date();
   const curYear = now.getFullYear();
   const curMonth = now.getMonth() + 1;
-  const contractYear = 2000 + parseInt(yearPart);
   // 合约月份已过 = 过期
   if (contractYear < curYear || (contractYear === curYear && mm < curMonth)) {
     return { valid: false, warning: '✗ 合约 ' + code + ' 已过期（' + contractYear + '年' + mm + '月），请换为当月或远月合约', level: 'error' };
@@ -119,13 +124,13 @@ function validateContract(contractCode, varietySymbol) {
 // 预置观察池：8 个品种，合约为当前主力月份（2026-07，动态维护）
 const DEFAULT_COMMODITIES = [
   {symbol:'棕榈油',contractCode:'P2609',multiplier:10,marginRate:0.08,price:0,percentile:0,costLine:0,status:'bottom',category:'农产品',exchange:'DCE'},
-  {symbol:'白糖',contractCode:'SR509',multiplier:10,marginRate:0.08,price:0,percentile:0,costLine:0,status:'bottom',category:'农产品',exchange:'CZCE'},
-  {symbol:'棉花',contractCode:'CF509',multiplier:5,marginRate:0.08,price:0,percentile:0,costLine:0,status:'bottom',category:'农产品',exchange:'CZCE'},
+  {symbol:'白糖',contractCode:'SR609',multiplier:10,marginRate:0.08,price:0,percentile:0,costLine:0,status:'bottom',category:'农产品',exchange:'CZCE'},
+  {symbol:'棉花',contractCode:'CF609',multiplier:5,marginRate:0.08,price:0,percentile:0,costLine:0,status:'bottom',category:'农产品',exchange:'CZCE'},
   {symbol:'天然橡胶',contractCode:'RU2609',multiplier:10,marginRate:0.12,price:0,percentile:0,costLine:0,status:'bottom',category:'能源化工',exchange:'SHFE'},
   {symbol:'铜',contractCode:'CU2609',multiplier:5,marginRate:0.09,price:0,percentile:0,costLine:0,status:'bottom',category:'有色金属',exchange:'SHFE'},
   {symbol:'黄金',contractCode:'AU2608',multiplier:1000,marginRate:0.08,price:0,percentile:0,costLine:0,status:'bottom',category:'贵金属',exchange:'SHFE'},
   {symbol:'白银',contractCode:'AG2608',multiplier:15,marginRate:0.10,price:0,percentile:0,costLine:0,status:'bottom',category:'贵金属',exchange:'SHFE'},
-  {symbol:'多晶硅',contractCode:'PS2509',multiplier:3,marginRate:0.12,price:0,percentile:0,costLine:0,status:'bottom',category:'新能源',exchange:'GFEX'}
+  {symbol:'多晶硅',contractCode:'PS2609',multiplier:3,marginRate:0.12,price:0,percentile:0,costLine:0,status:'bottom',category:'新能源',exchange:'GFEX'}
 ];
 
 const FUND_DIMENSIONS = [
