@@ -1,0 +1,26 @@
+{
+  "updated": "2026-07-09",
+  "source": "行业协会/研报/交易所公开数据整理",
+  "note": "品种完全生产成本参考值，区分国产/进口。成本会随原料、能源价格波动，建议每半年更新。用于观察池成本线自动回填和价差计算。",
+  "records": [
+    {"symbol":"棕榈油","costDomestic":0,"costImport":7800,"unit":"元/吨","updated":"2026-07-09","source":"印尼/马来到岸成本(含关税增值税)","note":"棕榈油完全依赖进口，costDomestic=0表示无国产，用进口到岸成本"},
+    {"symbol":"白糖","costDomestic":5800,"costImport":4500,"unit":"元/吨","updated":"2026-07-09","source":"糖业协会/海关","note":"国产糖成本含加工费+税费，高于配额内进口糖(15%关税)"},
+    {"symbol":"棉花","costDomestic":15000,"costImport":13000,"unit":"元/吨","updated":"2026-07-09","source":"棉花协会/海关","note":"新疆棉机采成本约14000-16000，进口棉(1%关税)约13000"},
+    {"symbol":"天然橡胶","costDomestic":13000,"costImport":11500,"unit":"元/吨","updated":"2026-07-09","source":"云南/海南胶农成本+泰国RSS3到岸","note":"国产割胶人工成本高，进口标胶价格较低"},
+    {"symbol":"铜","costDomestic":62000,"costImport":0,"unit":"元/吨","updated":"2026-07-09","source":"矿企冶炼成本(90分位现金成本)","note":"铜精矿TC+冶炼费，进口矿为主，不区分国产/进口"},
+    {"symbol":"黄金","costDomestic":380,"costImport":0,"unit":"元/克","updated":"2026-07-09","source":"黄金矿业AISC全维持成本","note":"国内金矿开采成本350-400元/克，国际约$1200/盎司"},
+    {"symbol":"白银","costDomestic":4500,"costImport":0,"unit":"元/千克","updated":"2026-07-09","source":"伴生矿综合成本","note":"白银多为铜铅锌伴生，成本随主金属波动"},
+    {"symbol":"多晶硅","costDomestic":38000,"costImport":0,"unit":"元/吨","updated":"2026-07-09","source":"中国硅业分会","note":"N型料生产成本35000-42000，头部企业成本更低"},
+    {"symbol":"螺纹钢","costDomestic":3400,"costImport":0,"unit":"元/吨","updated":"2026-07-09","source":"钢联/我的钢铁网","note":"长流程螺纹完全成本3300-3600(含铁水+轧制+财务)"},
+    {"symbol":"铁矿石","costDomestic":600,"costImport":650,"unit":"元/吨","updated":"2026-07-09","source":"四大矿C1成本+国内矿","note":"澳洲/巴西C1成本$15-20/吨，国内矿成本较高"},
+    {"symbol":"豆粕","costDomestic":3000,"costImport":3200,"unit":"元/吨","updated":"2026-07-09","source":"大豆压榨成本","note":"豆粕成本=大豆价格×0.78+加工费，随美豆/南美豆价格波动"},
+    {"symbol":"玉米","costDomestic":2400,"costImport":2200,"unit":"元/吨","updated":"2026-07-09","source":"东北农户种植成本+进口","note":"东北租地+化肥+种子成本，进口配额内较低"},
+    {"symbol":"玻璃","costDomestic":1300,"costImport":0,"unit":"元/吨","updated":"2026-07-09","source":"玻璃协会","note":"天然气/石油焦燃料成本占40%，纯碱占25%"},
+    {"symbol":"纯碱","costDomestic":1500,"costImport":0,"unit":"元/吨","updated":"2026-07-09","source":"纯碱协会","note":"氨碱法1400-1600，联碱法1300-1500，天然碱法最低800"},
+    {"symbol":"甲醇","costDomestic":2300,"costImport":2100,"unit":"元/吨","updated":"2026-07-09","source":"煤制/气制成本","note":"煤制甲醇2000-2500，进口中东天然气制成本较低"},
+    {"symbol":"铝","costDomestic":17500,"costImport":0,"unit":"元/吨","updated":"2026-07-09","source":"电解铝完全成本","note":"氧化铝+电力(占40%)+预焙阳极，电价是核心变量"},
+    {"symbol":"PVC","costDomestic":5600,"costImport":0,"unit":"元/吨","updated":"2026-07-09","source":"电石法/乙烯法","note":"电石法5500-5800(占80%)，乙烯法随原油波动"},
+    {"symbol":"碳酸锂","costDomestic":75000,"costImport":0,"unit":"元/吨","updated":"2026-07-09","source":"盐湖/矿石提锂","note":"盐湖提锂40000-60000，矿石提锂70000-90000，电池级"},
+    {"symbol":"工业硅","costDomestic":10500,"costImport":0,"unit":"元/吨","updated":"2026-07-09","source":"硅业分会","note":"新疆电价低成本低至9000，云南四川丰水期10000-11000"}
+  ]
+}
