@@ -324,16 +324,21 @@
 <script src="../shared/chart-engine.js"></script>
 <script src="../shared/ui-core.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
   // 每个初始化步骤独立 try-catch，避免单个失败中断整个初始化链
   var safe = function(name, fn) { try { fn(); } catch(e) { console.error('[FT] 初始化失败:', name, e); } };
+  var safeAsync = async function(name, fn) { try { await fn(); } catch(e) { console.error('[FT] 初始化失败:', name, e); } };
   safe('initTheme', function(){ FTApp.initTheme(); });
   safe('loadState', function(){ FTApp.loadState(); });
   safe('loadSettings', function(){ FTApp.loadSettings(); });
+  // 异步加载历史价格区间和成本参考数据（渲染前必须完成）
+  await safeAsync('loadPriceHistory', function(){ return FTApp.loadPriceHistory(); });
+  await safeAsync('loadCostReference', function(){ return FTApp.loadCostReference(); });
+  safe('ensurePercentileComputed', function(){ FTApp.ensurePercentileComputed(); });
+  safe('renderPool', function(){ FTRender.renderPool(); });
   safe('initAutoRefresh', function(){ FTApp.initAutoRefresh(); });
   safe('initAutoBackup', function(){ FTApp.initAutoBackup(); });
   safe('updateBackupDisplay', function(){ FTApp.updateBackupDisplay(); });
-  safe('renderPool', function(){ FTRender.renderPool(); });
 });
 </script>
 

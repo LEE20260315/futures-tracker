@@ -767,24 +767,77 @@ function computePercentile(symbol, price) {
   return pct;
 }
 
+// 预计算百分位：在 renderPool/refreshSignals 之前调用，用存储价格更新所有品种的 percentile
+// 解决"不点刷新行情百分位就为0"的问题
+function ensurePercentileComputed() {
+  if (!priceHistory || !priceHistory.records) return;
+  if (!state.pool || !state.pool.length) return;
+  state.pool.forEach(function(c) {
+    if (c.price && c.price > 0) {
+      var pct = computePercentile(c.symbol, c.price);
+      if (pct !== null) c.percentile = pct;
+    }
+  });
+}
+
 // 获取品种成本参考（用于观察池自动回填）
 function getCostReference(symbol) {
   if (!costReference || !costReference.records) return null;
   return costReference.records.find(r => r.symbol === symbol) || null;
 }
 
+// 获取有效基本面分数：手动分>0取手动分，否则取自动推算分
+// dimKey: 'supply' | 'inventory' | 'basis'
+function getEffectiveFundScore(symbol, dimKey) {
+  var fund = state.fundamentals[symbol] || {};
+  var dim = fund[dimKey] || {};
+  var manualScore = (dim.score != null) ? dim.score : 0;
+  if (manualScore > 0) return manualScore;  // 用户已手动评分，优先使用
+
+  // 自动推算：有外部日报→综合分映射；无外部日报→百分位推算
+  var c = state.pool.find(function(x) { return x.symbol === symbol; });
+  var pct = c ? (c.percentile || 0) : 0;
+  var feed = window.__fundFeed;
+  var extScore = null;
+  if (feed && feed.records && feed.records.length) {
+    var feishuName = (PROJECT_TO_FEISHU_MAP && PROJECT_TO_FEISHU_MAP[symbol]) || symbol;
+    var v = feed.records[0].varieties && feed.records[0].varieties[feishuName];
+    if (v && v.score != null) extScore = v.score;
+  }
+
+  var score;
+  if (extScore != null) {
+    // 有外部日报：综合分≥60→7, ≥45→5, ≥30→3, <30→2（basis用8/6/4/2）
+    if (dimKey === 'basis') {
+      score = extScore >= 60 ? 8 : (extScore >= 45 ? 6 : (extScore >= 30 ? 4 : 2));
+    } else {
+      score = extScore >= 60 ? 7 : (extScore >= 45 ? 5 : (extScore >= 30 ? 3 : 2));
+    }
+  } else if (pct && pct > 0) {
+    // 无外部日报，基于百分位：≤20→7, ≤35→5, ≤50→3, >50→2（basis用8/6/4/2）
+    if (dimKey === 'basis') {
+      score = pct <= 20 ? 8 : (pct <= 35 ? 6 : (pct <= 50 ? 4 : 2));
+    } else {
+      score = pct <= 20 ? 7 : (pct <= 35 ? 5 : (pct <= 50 ? 3 : 2));
+    }
+  } else {
+    score = 0;
+  }
+  return score;
+}
+
 function isSweetSignal(symbol) {
-  const c = state.pool.find(x => x.symbol === symbol);
+  var c = state.pool.find(function(x) { return x.symbol === symbol; });
   if (!c) return false;
   // percentile 为 null/undefined/0(未计算) 时返回 false，不误判甜点
   if (c.percentile == null || c.percentile === 0) return false;
-  // 估值分：基于真实 percentile（不再因 0 误判为 5）
-  const valScore = c.percentile <= 20 ? 5 : c.percentile <= 35 ? 4 : c.percentile <= 50 ? 2 : 1;
-  const fund = state.fundamentals[c.symbol] || {};
-  const supplyScore = (fund.supply && fund.supply.score) || 0;
-  const inventoryScore = (fund.inventory && fund.inventory.score) || 0;
-  // 基本面甜点：估值分≥4 AND 供需≥6 AND 库存≥6（阈值从4调整为6，更严格）
-  return valScore >= 4 && supplyScore >= 6 && inventoryScore >= 6;
+  // 估值分：基于真实 percentile
+  var valScore = c.percentile <= 20 ? 5 : c.percentile <= 35 ? 4 : c.percentile <= 50 ? 2 : 1;
+  // 使用有效基本面分数（手动分>0取手动分，否则取自动推算分）
+  var supplyScore = getEffectiveFundScore(symbol, 'supply');
+  var inventoryScore = getEffectiveFundScore(symbol, 'inventory');
+  // 基本面甜点：估值分≥4 AND 有效供给分≥5 AND 有效库存分≥5
+  return valScore >= 4 && supplyScore >= 5 && inventoryScore >= 5;
 }
 
 // ============ SETTINGS (form load/save) ============
@@ -904,6 +957,7 @@ window.FTApp = {
   findVarietyMeta,
   // 百分位/成本参考
   computePercentile, getCostReference, loadPriceHistory, loadCostReference,
+  ensurePercentileComputed, getEffectiveFundScore,
   priceHistory: () => priceHistory,  // 用函数返回避免导出时为null
   costReference: () => costReference
 };

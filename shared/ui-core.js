@@ -377,20 +377,24 @@
         var v = feed.records[0].varieties && feed.records[0].varieties[feishuName];
         if (v && v.score != null) { hasExternal = true; extScore = v.score; }
       }
-      // 估值维度自动填充
-      var autoValScore = 0;
-      var autoValSource = '';
+      // 多维度自动填充：basis/supply/inventory 三个维度
+      var autoScores = {basis: 0, supply: 0, inventory: 0};
+      var autoSource = '';
       if (hasExternal && extScore != null) {
-        // 有外部日报：综合分≥60→8, ≥45→6, ≥30→4, <30→2
-        autoValScore = extScore >= 60 ? 8 : (extScore >= 45 ? 6 : (extScore >= 30 ? 4 : 2));
-        autoValSource = '外部日报(' + extScore.toFixed(1) + '分)';
+        // 有外部日报：basis ≥60→8/≥45→6/≥30→4/<30→2；supply/inventory ≥60→7/≥45→5/≥30→3/<30→2
+        autoScores.basis = extScore >= 60 ? 8 : (extScore >= 45 ? 6 : (extScore >= 30 ? 4 : 2));
+        autoScores.supply = extScore >= 60 ? 7 : (extScore >= 45 ? 5 : (extScore >= 30 ? 3 : 2));
+        autoScores.inventory = extScore >= 60 ? 7 : (extScore >= 45 ? 5 : (extScore >= 30 ? 3 : 2));
+        autoSource = '外部日报(' + extScore.toFixed(1) + '分)';
       } else {
         // 无外部数据：基于百分位
         var poolItem = FTApp.state.pool.find(function(x){return x.symbol === sym;});
         var pct = poolItem ? poolItem.percentile : 0;
         if (pct && pct > 0) {
-          autoValScore = pct <= 20 ? 8 : (pct <= 35 ? 6 : (pct <= 50 ? 4 : 2));
-          autoValSource = '百分位(' + pct + '%)';
+          autoScores.basis = pct <= 20 ? 8 : (pct <= 35 ? 6 : (pct <= 50 ? 4 : 2));
+          autoScores.supply = pct <= 20 ? 7 : (pct <= 35 ? 5 : (pct <= 50 ? 3 : 2));
+          autoScores.inventory = pct <= 20 ? 7 : (pct <= 35 ? 5 : (pct <= 50 ? 3 : 2));
+          autoSource = '百分位(' + pct + '%)';
         }
       }
       dims.forEach(function (d) {
@@ -398,9 +402,9 @@
         if (!sInp) return;
         var data = fund[d[2]] || {};
         var score;
-        // 基差结构维度（fundBasis/basis）自动填充估值分数
-        if (d[2] === 'basis' && !data.score && data.score !== 0) {
-          score = autoValScore;
+        // basis/supply/inventory 三维度自动填充（仅在用户未手动评分时）
+        if (autoScores.hasOwnProperty(d[2]) && (!data.score || data.score === 0)) {
+          score = autoScores[d[2]];
         } else {
           score = (data.score != null) ? data.score : 0;
         }
@@ -413,9 +417,9 @@
       if (hint) {
         if (hasExternal) {
           hint.innerHTML = '<span style="color:#8ca06f">📊 外部日报：' + FTApp.escapeHtml(sym) + ' 综合分 ' + extScore.toFixed(1) +
-            (autoValSource ? ' · 估值维度已根据' + autoValSource + '自动填充' : '') + '</span>';
-        } else if (autoValSource) {
-          hint.innerHTML = '<span style="color:#8ca06f">📈 ' + FTApp.escapeHtml(sym) + ' 估值维度已根据' + autoValSource + '自动推算，其他维度请手动评分</span>';
+            (autoSource ? ' · 估值/供给/库存维度已根据' + autoSource + '自动填充' : '') + '</span>';
+        } else if (autoSource) {
+          hint.innerHTML = '<span style="color:#8ca06f">📈 ' + FTApp.escapeHtml(sym) + ' 估值/供给/库存维度已根据' + autoSource + '自动推算，其他维度请手动评分</span>';
         } else {
           hint.innerHTML = '<span style="color:#e08d6f">⚠ ' + FTApp.escapeHtml(sym) + ' 无外部日报数据且无百分位，请手动填写各维度评分</span>';
         }
@@ -467,8 +471,22 @@
         var p = c.percentile || 0;
         // 估值灯：基于真实 percentile
         var valLight = p === 0 ? 'yellow' : (p <= 25 ? 'green' : (p <= 50 ? 'yellow' : 'red'));
-        // 基本面灯：基于 isSweetSignal 真实结果
-        var fundLight = FTApp.isSweetSignal(c.symbol) ? 'green' : 'yellow';
+        // 基本面灯：综合 isSweetSignal 和外部日报综合分
+        var fundLight;
+        var extFundScore = null;
+        var feed = window.__fundFeed;
+        if (feed && feed.records && feed.records.length) {
+          var feishuName = (FTApp.PROJECT_TO_FEISHU_MAP && FTApp.PROJECT_TO_FEISHU_MAP[c.symbol]) || c.symbol;
+          var fv = feed.records[0].varieties && feed.records[0].varieties[feishuName];
+          if (fv && fv.score != null) extFundScore = fv.score;
+        }
+        if (FTApp.isSweetSignal(c.symbol)) {
+          fundLight = 'green';
+        } else if (extFundScore != null) {
+          fundLight = extFundScore >= 60 ? 'green' : (extFundScore >= 40 ? 'yellow' : 'red');
+        } else {
+          fundLight = 'yellow';
+        }
         // 资金/趋势灯：百分位+成本价差联合判断
         // 获取有效成本
         var effCost = c.costLine || 0;
@@ -487,7 +505,8 @@
         // 详情列
         var costStr = costDiff !== 0 ? (costDiff > 0 ? '成本上+' : '成本下') + Math.abs(costDiff).toFixed(0) : '无成本数据';
         var fundStr = fundLight === 'green' ? '甜点' : '一般';
-        var detail = '估值' + (p > 0 ? p + '%' : '无数据') + '，' + costStr + '，基本面' + fundStr;
+        var extStr = extFundScore != null ? '外部' + extFundScore.toFixed(0) + '分' : '手动评分';
+        var detail = '估值' + (p > 0 ? p + '%' : '无数据') + '，' + costStr + '，基本面' + fundStr + '，' + extStr;
         html += '<tr>' +
           '<td class="py-2 px-4 text-ink">' + FTApp.escapeHtml(c.symbol) + '</td>' +
           '<td class="py-2 px-4"><span class="signal-light signal-' + valLight + '"></span></td>' +

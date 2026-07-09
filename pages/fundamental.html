@@ -431,8 +431,12 @@ document.addEventListener('DOMContentLoaded', async function() {
   safe('initAutoBackup', function(){ FTApp.initAutoBackup(); });
   safe('updateBackupDisplay', function(){ FTApp.updateBackupDisplay(); });
   safe('populateFundSelect', function(){ FTApp.populateFundSelect(); });
-  // 异步加载飞书日报基本面数据，再渲染初始面板
+  // 异步加载飞书日报基本面数据
   await safeAsync('loadFundamentalFeed', function(){ return FTRender.loadFundamentalFeed(); });
+  // 加载历史价格区间和成本参考（loadFundamental 需要 percentile 数据推算估值维度）
+  await safeAsync('loadPriceHistory', function(){ return FTApp.loadPriceHistory(); });
+  await safeAsync('loadCostReference', function(){ return FTApp.loadCostReference(); });
+  safe('ensurePercentileComputed', function(){ FTApp.ensurePercentileComputed(); });
   safe('loadFundamental', function(){ FTRender.loadFundamental(); });
   safe('renderExternalFundSignal', function(){ FTRender.renderExternalFundSignal(); });
 });
