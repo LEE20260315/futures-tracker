@@ -332,6 +332,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   safe('loadSettings', function(){ FTApp.loadSettings(); });
   await safeAsync('loadPriceHistory', function(){ return FTApp.loadPriceHistory(); });
   await safeAsync('loadCostReference', function(){ return FTApp.loadCostReference(); });
+  safeAsync('backfillPriceSnapshots', function(){ return FTApp.backfillPriceSnapshots(); });
   safe('initAutoRefresh', function(){ FTApp.initAutoRefresh(); });
   safe('initAutoBackup', function(){ FTApp.initAutoBackup(); });
   safe('updateBackupDisplay', function(){ FTApp.updateBackupDisplay(); });

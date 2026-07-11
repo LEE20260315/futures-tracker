@@ -335,6 +335,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   await safeAsync('loadPriceHistory', function(){ return FTApp.loadPriceHistory(); });
   await safeAsync('loadCostReference', function(){ return FTApp.loadCostReference(); });
   safe('ensurePercentileComputed', function(){ FTApp.ensurePercentileComputed(); });
+  safeAsync('backfillPriceSnapshots', function(){ return FTApp.backfillPriceSnapshots(); });
   safe('renderPool', function(){ FTRender.renderPool(); });
   safe('initAutoRefresh', function(){ FTApp.initAutoRefresh(); });
   safe('initAutoBackup', function(){ FTApp.initAutoBackup(); });

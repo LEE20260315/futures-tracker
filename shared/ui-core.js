@@ -523,10 +523,14 @@
           rate = '买入'; rateLight = 'green';
         } else if (hasPct && p <= 35 && momStatus !== 'down' && composite >= 60 && !factorMissing) {
           rate = '加仓'; rateLight = 'green';
+        } else if (hasPct && p <= 10 && momUnknown && extFundScore != null && extFundScore >= 40) {
+          // 动量未就绪时的弱信号：估值极低(分位<10%) + 基本面不差 → "关注"（黄色）
+          // 不锁死观望，让估值因子在动量积累期仍能发声，但明确标注"动量待确认"
+          rate = '关注'; rateLight = 'yellow';
         } else {
           rate = '观望'; rateLight = 'yellow';
         }
-        // 因子缺失强制降级为观望（不给出买入/加仓）
+        // 因子缺失强制降级为观望（不给出买入/加仓；"关注"是弱信号允许保留）
         if (factorMissing && rateLight === 'green') { rate = '观望'; rateLight = 'yellow'; }
         if (rate === '买入' || rate === '加仓') buyCount++;
 
@@ -546,6 +550,7 @@
         }
         var fundStr = extFundScore != null ? ('基本面外部' + extFundScore.toFixed(0) + '分') : '基本面无外部数据';
         var extraStr = (hasPct && p <= 25 && momStatus === 'down') ? '，逆势不抄底' : '';
+        if (rate === '关注') extraStr += '，动量待确认';
         var detail = valStr + ' · ' + momStr + ' · ' + fundStr + extraStr;
 
         // ---- 信号通知：检测从非买入变为买入 ----

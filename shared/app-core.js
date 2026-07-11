@@ -877,15 +877,24 @@ function computePercentile(symbol, price) {
 
 // ============ MOMENTUM FACTOR (动量因子) ============
 // 价格快照积累 + MA20/MA60 + 近20日涨跌速率，作为三因子信号矩阵的动量维度数据源
+//
+// 采样逻辑说明：
+// - 每个交易日只记一笔（按日期去重），避免分钟级刷新噪音污染日线动量
+// - 同日多次刷新：仅当价格变化>0.5%时才覆盖（允许显著变化更新，过滤盘中微小波动）
+// - 每品种最多保留 60 条（约 3 个月交易日）
+// - 手动模式点"立即刷新"也会触发记录（fetchPricesNow 三路降级失败时不记）
+// - 冷启动时 backfillPriceSnapshots() 从东财日线接口回补近 30 日历史收盘价
 
-// 记录品种当日价格快照（同日覆盖，保留最近 60 条）
 function recordPriceSnapshot(symbol, price) {
   if (!symbol || !price || price <= 0) return;
   if (!state.priceSnapshots) state.priceSnapshots = {};
   var today = new Date().toISOString().slice(0, 10);
   var arr = state.priceSnapshots[symbol] || [];
-  // 同日覆盖
+  // 同日去重：仅当价格变化>0.5%时才覆盖（过滤盘中微小波动，保留显著变化）
   if (arr.length && arr[arr.length - 1].date === today) {
+    var prev = arr[arr.length - 1].price;
+    var changePct = Math.abs(price - prev) / prev;
+    if (changePct < 0.005) return;  // 变化<0.5% 不覆盖
     arr[arr.length - 1].price = price;
   } else {
     arr.push({ date: today, price: price });
@@ -893,6 +902,87 @@ function recordPriceSnapshot(symbol, price) {
   // 保留最近 60 条
   if (arr.length > 60) arr = arr.slice(arr.length - 60);
   state.priceSnapshots[symbol] = arr;
+}
+
+// 冷启动回补：从东财日线 K 线接口拉取近 30 日历史收盘价，填充 priceSnapshots
+// 仅对快照不足 20 条的品种执行，避免重复拉取
+async function backfillPriceSnapshots() {
+  if (!state.pool || !state.pool.length) return;
+  if (!state.priceSnapshots) state.priceSnapshots = {};
+  var needBackfill = [];
+  state.pool.forEach(function (c) {
+    var arr = state.priceSnapshots[c.symbol] || [];
+    if (arr.length < 20 && EASTMONEY_SYMBOL_MAP[c.symbol]) {
+      needBackfill.push(c.symbol);
+    }
+  });
+  if (!needBackfill.length) return;
+  console.log('[FT] 冷启动回补动量快照:', needBackfill.join(', '));
+  var backfilled = 0;
+  // 并发拉取（每品种独立 JSONP）
+  await Promise.all(needBackfill.map(function (sym) {
+    return fetchDailyKlineFromEastMoney(sym).then(function (klines) {
+      if (klines && klines.length) {
+        // 合并：保留已有快照 + 补充历史（按日期去重，已有的不覆盖）
+        var existing = state.priceSnapshots[sym] || [];
+        var existingDates = {};
+        existing.forEach(function (s) { existingDates[s.date] = true; });
+        klines.forEach(function (k) {
+          if (!existingDates[k.date]) existing.push(k);
+        });
+        // 按日期排序后保留最近 60 条
+        existing.sort(function (a, b) { return a.date.localeCompare(b.date); });
+        if (existing.length > 60) existing = existing.slice(existing.length - 60);
+        state.priceSnapshots[sym] = existing;
+        backfilled++;
+      }
+    });
+  }));
+  if (backfilled > 0) {
+    saveState();
+    console.log('[FT] 冷启动回补完成:', backfilled, '个品种');
+    // 回补后刷新信号矩阵
+    if (window.FTRender && window.FTRender.refreshSignals) window.FTRender.refreshSignals();
+  }
+}
+
+// 东财日线 K 线 JSONP 拉取：返回 [{date, price}, ...]（price=收盘价）
+function fetchDailyKlineFromEastMoney(symbol) {
+  return new Promise(function (resolve) {
+    var secid = EASTMONEY_SYMBOL_MAP[symbol];
+    if (!secid) { resolve([]); return; }
+    var cbName = '_em_kline_cb_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    var timeout = setTimeout(function () { cleanup(); resolve([]); }, 8000);
+    function cleanup() {
+      clearTimeout(timeout);
+      delete window[cbName];
+      var s = document.getElementById('emKlineScript_' + cbName);
+      if (s) s.remove();
+    }
+    window[cbName] = function (data) {
+      cleanup();
+      if (!data || !data.data || !data.data.klines) { resolve([]); return; }
+      // 东财 klines 格式: ["日期,开盘,收盘,最高,最低,成交量,成交额,振幅,涨跌幅,涨跌额,换手率", ...]
+      var result = [];
+      data.data.klines.forEach(function (line) {
+        var parts = line.split(',');
+        if (parts.length >= 3) {
+          var date = parts[0];
+          var close = parseFloat(parts[2]);
+          if (date && !isNaN(close) && close > 0) {
+            result.push({ date: date, price: close });
+          }
+        }
+      });
+      resolve(result);
+    };
+    var script = document.createElement('script');
+    script.id = 'emKlineScript_' + cbName;
+    // klt=101 日线, fqt=0 不复权, lmt=30 取30条, end=20500101 取到最新
+    script.src = 'https://push2his.eastmoney.com/api/qt/stock/kline/get?ut=bd1d9ddb04089700cf9c27f6f7426281&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&klt=101&fqt=0&end=20500101&lmt=30&secid=' + secid + '&cb=' + cbName;
+    script.onerror = function () { cleanup(); resolve([]); };
+    document.head.appendChild(script);
+  });
 }
 
 // 计算动量指标：MA20/MA60、近20日涨跌速率、status、score
@@ -1088,6 +1178,9 @@ function init() {
   initAutoRefresh();
   initAutoBackup();
   updateBackupDisplay();
+  // 冷启动回补：若品种快照不足 20 条，从东财日线接口拉取近 30 日历史收盘价
+  // 异步执行不阻塞 init，回补完成后自动刷新信号矩阵
+  backfillPriceSnapshots();
 
   // listen for storage changes from other tabs
   window.addEventListener('storage', (e) => {
@@ -1146,7 +1239,7 @@ window.FTApp = {
   computePercentile, getCostReference, loadPriceHistory, loadCostReference,
   ensurePercentileComputed, getEffectiveFundScore, getFundamentalComposite,
   // 动量因子
-  recordPriceSnapshot, computeMomentum,
+  recordPriceSnapshot, computeMomentum, backfillPriceSnapshots,
   // 资金曲线
   updateEquityHistory,
   priceHistory: () => priceHistory,  // 用函数返回避免导出时为null
