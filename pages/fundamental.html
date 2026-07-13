@@ -551,18 +551,37 @@
     }
     if (!symbol) { box.innerHTML = ''; return; }
 
-    // 1. 估值位置：取分位%（从 FTApp.state.pool 中查）
+    // 1. 估值位置：取分位%
+    // 修复点：原逻辑只读 pool.percentile，但基本面页加载时若行情未刷新，price=0 → percentile=0 → 误判"数据不足"
+    // 新逻辑：① 优先用 pool.percentile（若>0）；② 否用 computePercentile(symbol, pool.price) 实时算（若 price>0）；
+    //        ③ 若 price 也为 0（基本面页未刷行情），用 priceHistory.avg 作中位估值（(avg-low)/(high-low)*100）作参考
     var poolEntry = FTApp.state.pool.find(function (c) { return c.symbol === symbol; });
-    var pct = poolEntry ? poolEntry.percentile : null;
+    var pct = (poolEntry && poolEntry.percentile > 0) ? poolEntry.percentile : null;
+    var valuationSource = '';
+    if (pct == null && poolEntry && poolEntry.price > 0 && typeof computePercentile === 'function') {
+      var livePct = computePercentile(symbol, poolEntry.price);
+      if (livePct != null && livePct > 0) { pct = livePct; valuationSource = '（实时）'; }
+    }
+    if (pct == null) {
+      // 行情未拉到：用 priceHistory.avg 作中位估值参考
+      var ph = (typeof FTApp.priceHistory === 'function') ? FTApp.priceHistory() : FTApp.priceHistory;
+      if (ph && ph.records) {
+        var rec = ph.records.find(function (r) { return r.symbol === symbol; });
+        if (rec && rec.avg && rec.low && rec.high && rec.high > rec.low) {
+          pct = Math.round((rec.avg - rec.low) / (rec.high - rec.low) * 100);
+          valuationSource = '（均值参考）';
+        }
+      }
+    }
     var valuationText, valuationTag;
     if (pct == null || pct === 0) {
       valuationText = '估值数据不足'; valuationTag = 'muted';
     } else if (pct <= 25) {
-      valuationText = '估值低位（分位 ' + pct + '%，赔率好）'; valuationTag = 'good';
+      valuationText = '估值低位（分位 ' + pct + '%' + valuationSource + '，赔率好）'; valuationTag = 'good';
     } else if (pct <= 75) {
-      valuationText = '估值中性（分位 ' + pct + '%）'; valuationTag = 'neutral';
+      valuationText = '估值中性（分位 ' + pct + '%' + valuationSource + '）'; valuationTag = 'neutral';
     } else {
-      valuationText = '估值高位（分位 ' + pct + '%，赔率差）'; valuationTag = 'bad';
+      valuationText = '估值高位（分位 ' + pct + '%' + valuationSource + '，赔率差）'; valuationTag = 'bad';
     }
 
     // 2. 筹码位置：解析日报 fullReport 中的 COT_xxx_NET_LONG 分位
@@ -777,14 +796,21 @@
     }
 
     // agri / metal：按模板权重归一化
+    // 拒绝出分闸门（全局统一，不因品种类别豁免）：
+    //   主判定 = 有效维度个数占比 < refuseThreshold → 拒绝（与用户口径"5维中2维有效=40%"一致）
+    //   辅判定 = 有效权重占比 < refuseThreshold → 拒绝（保留原逻辑兜底）
+    //   二者满足其一即拒绝。修复点：原逻辑只看权重占比，agri 模板 supply(0.35)+inventory(0.30)=0.65>0.5 不触发，
+    //   但实际 5 维仅 2 维有效(40%)，应触发拒绝。改为维度个数占比主导。
     var tpl = cfg.templates[st.template] || cfg.templates.agri;
     var dimWeights = tpl.dims || {};
     var totalWeight = 0, validWeight = 0, weightedSum = 0;
+    var totalDimCount = 0, validDimCount = 0;
     var missingDims = [];
     cfg.dimensions.forEach(function (dim) {
       var w = dimWeights[dim.key];
       if (w == null) return; // 该模板不含此维度
       totalWeight += w;
+      totalDimCount++;
       var sInp = el(dim.inputId);
       var val = sInp ? (+sInp.value || 0) : 0;
       var disabled = sInp ? sInp.disabled : false;
@@ -792,15 +818,22 @@
       var isValid = (val > 0 && !disabled) || hasActive;
       if (isValid) {
         validWeight += w;
+        validDimCount++;
         weightedSum += val * w;
       } else {
         missingDims.push(dim);
       }
     });
 
-    var refuse = (totalWeight <= 0) || (validWeight <= 0) || (validWeight / totalWeight < cfg.refuseThreshold);
+    // 双闸门：维度个数占比 OR 权重占比，任一 < 阈值即拒绝
+    var dimRatio = totalDimCount > 0 ? (validDimCount / totalDimCount) : 0;
+    var weightRatio = totalWeight > 0 ? (validWeight / totalWeight) : 0;
+    var refuse = (totalWeight <= 0) || (validWeight <= 0) ||
+                 (dimRatio < cfg.refuseThreshold) || (weightRatio < cfg.refuseThreshold);
     if (refuse) {
-      // 贵金属等仅宏观有效模板：附上宏观情绪分，明示非品种基本面
+      // 拒绝出分提示：按模板区分有效维度摘要
+      // - metal：仅宏观有效，附宏观情绪分
+      // - agri：列出有效维度 + 缺失维度（如"供需库存强、待补基差宏观"），让用户看清信号结构
       var refuseText = '数据不足·拒绝出分';
       if (st.template === 'metal') {
         var macroInp = el('fundMacro');
@@ -809,6 +842,22 @@
         var mv = parseFloat(macroSpan);
         if (!(mv > 0)) mv = macroInp ? (+macroInp.value || 0) : 0;
         if (mv > 0) refuseText = '数据不足·拒绝出分（仅宏观情绪分 ' + mv.toFixed(1) + '，不代表品种基本面）';
+      } else if (st.template === 'agri' && validDimCount > 0) {
+        // 提取有效维度名 + 缺失维度名，生成摘要
+        var validNames = [], missingNames = [];
+        cfg.dimensions.forEach(function (dim) {
+          if (dimWeights[dim.key] == null) return;
+          var sInp = el(dim.inputId);
+          var val = sInp ? (+sInp.value || 0) : 0;
+          var disabled = sInp ? sInp.disabled : false;
+          var hasActive = (st.activeIndicators || []).some(function (ind) { return mapIndicatorToDim(ind.name) === dim.key; });
+          var isValid = (val > 0 && !disabled) || hasActive;
+          if (isValid) validNames.push(dim.name);
+          else missingNames.push(dim.name);
+        });
+        if (validNames.length && missingNames.length) {
+          refuseText = '数据不足·拒绝出分（' + validNames.join('') + '有效，待补' + missingNames.join('') + '）';
+        }
       }
       if (tot) { tot.textContent = refuseText; tot.style.color = '#908e84'; }
       if (bar) { bar.style.width = '0%'; bar.style.background = '#4a4a43'; }
@@ -817,7 +866,10 @@
         var parts = [];
         items.forEach(function (it) { parts.push(FTApp.escapeHtml(it.name) + '：' + FTApp.escapeHtml(it.reason)); });
         missingDims.forEach(function (d) { parts.push(FTApp.escapeHtml(d.name) + ' 无数据源'); });
-        reasons.innerHTML = '<div style="font-size:12px;color:#ef4444;margin-top:6px"><strong>缺失项：</strong>' + parts.join('；') + '</div>';
+        // 补充维度占比信息
+        var ratioInfo = '有效维度 ' + validDimCount + '/' + totalDimCount + '（' + Math.round(dimRatio * 100) + '%）< 阈值 50%';
+        reasons.innerHTML = '<div style="font-size:12px;color:#ef4444;margin-top:6px"><strong>缺失项：</strong>' + parts.join('；') + '</div>' +
+          '<div style="font-size:11px;color:#908e84;margin-top:4px">' + ratioInfo + '</div>';
       }
     } else {
       var score = (weightedSum / validWeight) * 10;  // 0-100
