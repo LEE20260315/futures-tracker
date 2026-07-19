@@ -144,7 +144,7 @@
     renderPool: function () {
       var body = el('poolBody');
       if (!body) return;
-      var pool = FTApp.getCurrentAccount().pool || [];
+      var pool = FTApp.state.accounts.sim.pool || [];
       if (!pool.length) {
         body.innerHTML = '<tr><td colspan="12" class="empty-state">观察池为空，点击"添加品种"开始</td></tr>';
         ensureContractList();
@@ -207,7 +207,7 @@
 
     // ============ 1.5 成本线就地录入（占位符点击触发） ============
     editCostLine: function (symbol) {
-      var c = FTApp.getCurrentAccount().pool.find(function (x) { return x.symbol === symbol; });
+      var c = FTApp.state.accounts.sim.pool.find(function (x) { return x.symbol === symbol; });
       if (!c) return;
       var input = window.prompt('设置 ' + symbol + ' 的成本线（元/吨或元/克，>0）：', c.costLine || '');
       if (input === null) return;
@@ -217,7 +217,7 @@
       FTApp.saveState();
       // 云同步:pool_snapshot 表
       if (window.CloudSync && CloudSync.config.enabled) {
-        CloudSync.upsertRecord('pool_snapshot', {symbol: c.symbol, contractCode: c.contractCode, costLine: c.costLine, exchange: c.exchange, tier: c.tier});
+        CloudSync.upsertRecord('pool_snapshot', {symbol: c.symbol, contractCode: c.contractCode, costLine: c.costLine, exchange: c.exchange, tier: c.tier, account: 'sim'});
       }
       this.renderPool();
     },
@@ -353,11 +353,11 @@
         FTApp.showToast('请选择或输入品种');
         return;
       }
-      if (FTApp.getCurrentAccount().pool.some(function (c) { return c.symbol === entry.symbol; })) {
+      if (FTApp.state.accounts.sim.pool.some(function (c) { return c.symbol === entry.symbol; })) {
         FTApp.showToast('该品种已在观察池中');
         return;
       }
-      FTApp.getCurrentAccount().pool.push(entry);
+      FTApp.state.accounts.sim.pool.push(entry);
       FTApp.saveState();
       this.renderPool();
       this.closeVarietyPicker();
@@ -366,7 +366,7 @@
 
     // ============ 4. 删除观察池行 ============
     removePoolRow: function (symbol) {
-      FTApp.getCurrentAccount().pool = FTApp.getCurrentAccount().pool.filter(function (c) { return c.symbol !== symbol; });
+      FTApp.state.accounts.sim.pool = FTApp.state.accounts.sim.pool.filter(function (c) { return c.symbol !== symbol; });
       FTApp.saveState();
       this.renderPool();
       FTApp.showToast('已删除 ' + symbol);
@@ -376,7 +376,7 @@
     savePool: function () {
       var body = el('poolBody');
       if (!body) return;
-      var findBySym = function (sym) { return FTApp.getCurrentAccount().pool.find(function (x) { return x.symbol === sym; }); };
+      var findBySym = function (sym) { return FTApp.state.accounts.sim.pool.find(function (x) { return x.symbol === sym; }); };
       var errorCount = 0, warnCount = 0;
       body.querySelectorAll('.contract-input').forEach(function (inp) {
         var c = findBySym(inp.dataset.symbol);
@@ -411,11 +411,11 @@
       FTApp.saveState();
       // 云同步:遍历 pool 推送到 pool_snapshot 表
       if (window.CloudSync && CloudSync.config.enabled) {
-        FTApp.getCurrentAccount().pool.forEach(function (c) {
+        FTApp.state.accounts.sim.pool.forEach(function (c) {
           CloudSync.upsertRecord('pool_snapshot', {
             symbol: c.symbol, contractCode: c.contractCode, exchange: c.exchange,
             multiplier: c.multiplier, marginRate: c.marginRate, costLine: c.costLine,
-            tier: c.tier, status: c.status, percentile: c.percentile
+            tier: c.tier, status: c.status, percentile: c.percentile, account: 'sim'
           });
         });
       }
@@ -460,7 +460,7 @@
         autoSource = '外部日报(' + extScore.toFixed(1) + '分)';
       } else {
         // 无外部数据：基于百分位
-        var poolItem = FTApp.getCurrentAccount().pool.find(function(x){return x.symbol === sym;});
+        var poolItem = FTApp.state.accounts.sim.pool.find(function(x){return x.symbol === sym;});
         var pct = poolItem ? poolItem.percentile : 0;
         if (pct && pct > 0) {
           autoScores.basis = pct <= 20 ? 8 : (pct <= 35 ? 6 : (pct <= 50 ? 4 : 2));
@@ -697,7 +697,7 @@
         } else {
           var h = '';
           trades.forEach(function (t, idx) {
-            var c = FTApp.getCurrentAccount().pool.find(function (x) { return x.symbol === t.symbol; });
+            var c = FTApp.state.accounts.sim.pool.find(function (x) { return x.symbol === t.symbol; });
             var cur = c && c.price ? c.price : t.price;
             var pnl = (t.dir === 'long' ? (cur - t.price) : (t.price - cur)) * t.multiplier * t.lots;
             var margin = t.price * t.multiplier * t.lots * (c ? (c.marginRate || 0.1) : 0.1);
@@ -750,7 +750,7 @@
       var eq = FTApp.getCurrentEquity();
       var margin = 0, unrealized = 0;
       (FTApp.getCurrentAccount().trades || []).forEach(function (t) {
-        var c = FTApp.getCurrentAccount().pool.find(function (x) { return x.symbol === t.symbol; });
+        var c = FTApp.state.accounts.sim.pool.find(function (x) { return x.symbol === t.symbol; });
         var cur = c && c.price ? c.price : t.price;
         margin += t.price * t.multiplier * t.lots * (c ? (c.marginRate || 0.1) : 0.1);
         var p = (t.dir === 'long' ? (cur - t.price) : (t.price - cur));
@@ -772,7 +772,7 @@
       var trades = FTApp.getCurrentAccount().trades || [];
       var t = trades[index];
       if (!t) return;
-      var c = FTApp.getCurrentAccount().pool.find(function (x) { return x.symbol === t.symbol; });
+      var c = FTApp.state.accounts.sim.pool.find(function (x) { return x.symbol === t.symbol; });
       var cur = c && c.price ? c.price : t.price;
       var pnl = (t.dir === 'long' ? (cur - t.price) : (t.price - cur)) * t.multiplier * t.lots - (t.openCommission || 0);
       var closedRec = Object.assign({}, t, {
@@ -795,15 +795,15 @@
       var sel = el('tradeSpecies');
       if (sel) {
         var opts = '<option value="">-- 选择品种 --</option>';
-        (FTApp.getCurrentAccount().pool || []).forEach(function (c) {
+        (FTApp.state.accounts.sim.pool || []).forEach(function (c) {
           opts += '<option value="' + FTApp.escapeHtml(c.symbol) + '">' + FTApp.escapeHtml(c.symbol) + '</option>';
         });
         sel.innerHTML = opts;
-        if (FTApp.getCurrentAccount().pool && FTApp.getCurrentAccount().pool.length) sel.value = FTApp.getCurrentAccount().pool[0].symbol;
+        if (FTApp.state.accounts.sim.pool && FTApp.state.accounts.sim.pool.length) sel.value = FTApp.state.accounts.sim.pool[0].symbol;
         // 品种切换时自动更新开仓价
         sel.onchange = function() {
           var sym = sel.value;
-          var c = FTApp.getCurrentAccount().pool.find(function(x) { return x.symbol === sym; });
+          var c = FTApp.state.accounts.sim.pool.find(function(x) { return x.symbol === sym; });
           var priceInput = el('tradePrice');
           if (priceInput && c && c.price && c.price > 0) {
             priceInput.value = c.price;
@@ -816,7 +816,7 @@
       var lots = el('tradeLots'); if (lots) lots.value = 1;
       var price = el('tradePrice');
       if (price) {
-        var first = FTApp.getCurrentAccount().pool && FTApp.getCurrentAccount().pool[0];
+        var first = FTApp.state.accounts.sim.pool && FTApp.state.accounts.sim.pool[0];
         price.value = (first && first.price && first.price > 0) ? first.price : '';
       }
       ['tradeStopLoss', 'tradeTakeProfit'].forEach(function (id) { var e = el(id); if (e) e.value = ''; });
@@ -871,7 +871,7 @@
       var sel = el('journalSpecies');
       if (sel) {
         var opts = '<option value="">-- 无 --</option>';
-        (FTApp.getCurrentAccount().pool || []).forEach(function (c) {
+        (FTApp.state.accounts.sim.pool || []).forEach(function (c) {
           opts += '<option value="' + FTApp.escapeHtml(c.symbol) + '">' + FTApp.escapeHtml(c.symbol) + '</option>';
         });
         sel.innerHTML = opts;
@@ -916,7 +916,7 @@
       // 浮动盈亏
       var unrealized = 0;
       (FTApp.getCurrentAccount().trades || []).forEach(function (t) {
-        var c = FTApp.getCurrentAccount().pool.find(function (x) { return x.symbol === t.symbol; });
+        var c = FTApp.state.accounts.sim.pool.find(function (x) { return x.symbol === t.symbol; });
         var cur = c && c.price ? c.price : t.price;
         unrealized += (t.dir === 'long' ? (cur - t.price) : (t.price - cur)) * t.multiplier * t.lots - (t.openCommission || 0);
       });
@@ -1214,7 +1214,7 @@
     var dir = ((el('tradeDirection') || {}).value) || 'long';
     var lots = +((el('tradeLots') || {}).value) || 1;
     var meta = FTApp.findVarietyMeta(sym) || {};
-    var c = FTApp.getCurrentAccount().pool.find(function (x) { return x.symbol === sym; });
+    var c = FTApp.state.accounts.sim.pool.find(function (x) { return x.symbol === sym; });
     var price = +((el('tradePrice') || {}).value);
     if (!price || isNaN(price)) price = c && c.price ? c.price : 0;
     var multiplier = meta.multiplier || (c ? c.multiplier : 10) || 10;
@@ -1288,7 +1288,7 @@
   window.FTTrade.closePosition = function () {
     var sym = ((el('closeSpecies') || {}).value) || '';
     if (!sym) { FTApp.showToast('未选择品种'); return; }
-    var c = FTApp.getCurrentAccount().pool.find(function (x) { return x.symbol === sym; });
+    var c = FTApp.state.accounts.sim.pool.find(function (x) { return x.symbol === sym; });
     var price = +((el('closePrice') || {}).value);
     if (!price || isNaN(price)) price = c && c.price ? c.price : 0;
     var lots = +((el('closeLots') || {}).value) || 1;
@@ -1333,7 +1333,7 @@
     var newP = +((el('rolloverNewPrice') || {}).value) || 0;
     var note = ((el('rolloverNote') || {}).value) || '';
     if (!newC) { FTApp.showToast('请输入新合约'); return; }
-    var c = FTApp.getCurrentAccount().pool.find(function (x) { return x.contractCode === oldC; }) || (FTApp.getCurrentAccount().pool[0] || { symbol: '' });
+    var c = FTApp.state.accounts.sim.pool.find(function (x) { return x.contractCode === oldC; }) || (FTApp.state.accounts.sim.pool[0] || { symbol: '' });
     var spread = newP && c.price ? (newP - c.price) : 0;
     FTApp.getCurrentAccount().rolloverHistory.push({
       date: new Date().toISOString().slice(0, 10),

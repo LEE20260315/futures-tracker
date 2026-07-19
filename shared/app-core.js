@@ -1014,7 +1014,7 @@ function updateHeaderStats() {
 }
 
 function populateSymbolSelect(sel) {
-  sel.innerHTML = getCurrentAccount().pool.map(c=>`<option value="${escapeHtml(c.symbol)}">${escapeHtml(c.symbol)}</option>`).join('');
+  sel.innerHTML = state.accounts.sim.pool.map(c=>`<option value="${escapeHtml(c.symbol)}">${escapeHtml(c.symbol)}</option>`).join('');
 }
 
 function populateFundSelect() {
