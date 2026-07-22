@@ -197,6 +197,15 @@ Sirius-war-room/
 - 基本面权重归一化至 100%
 - 修复二:交易类型按钮 pointer-events + 初始化顺序 + resetForm 重绑事件
 
+### 2026-07-23 — 观察池行情抓取修复
+
+- **CZCE/GFEX 合约代码 3 位格式**:CZCE/GFEX 使用 1 位年+2 位月格式(如 SR609),`contractToFutsseDm`/`validateContract`/`ensureContractList` 按交易所自动切换格式
+- **跨年歧义修复**:`validateContract` 双向 4 年窗口校准,`601`→2026 年而非 2016 年
+- **GFEX 市场码修正**:东财 GFEX 市场码从错误的 `8`(实际为中金所) 修正为 `225`,多晶硅(34250)、碳酸锂(143300)、工业硅(8250)均正常获取
+- **合约号空值回填**:`_backfillContractCodes()` 每次加载时从 `EXCHANGE_VARIETIES.defaultContract` 回填缺失的 `contractCode`,解决手动添加品种合约号空白的问题
+- **历史回补降级**:分批 3 个+2 次重试+数据不足用现有区间计算,不再弹"回补失败"
+- **K 线数据量提升**:`lmt` 从 30 提升至 60 条
+
 ## License
 
 MIT

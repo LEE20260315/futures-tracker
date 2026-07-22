@@ -600,9 +600,8 @@ function checkAutoBackup() {
 // ============ AUTO FETCH PRICES ============
 // === futsseapi EastMoney 期货列表 API（CORS 直连，主力数据源）===
 // 支持 CORS（Access-Control-Allow-Origin: *），浏览器可直接 fetch
-// 市场码: 113=SHFE, 114=DCE, 115=CZCE, 8=GFEX
-// CZCE/GFEX 的 futsseapi 支持可能不完整（API 返回格式可能有差异），代码已做格式兼容
-const FUTSSE_MARKET_MAP = { 'SHFE': 113, 'DCE': 114, 'CZCE': 115, 'GFEX': 8 };
+// 市场码: 113=SHFE, 114=DCE, 115=CZCE, 8=CFFEX, 225=GFEX
+const FUTSSE_MARKET_MAP = { 'SHFE': 113, 'DCE': 114, 'CZCE': 115, 'GFEX': 225, 'CFFEX': 8 };
 
 // 将合约代码转换为 futsseapi 的 dm 格式
 // 主力连续(XX0) → code.toLowerCase()+'m'；具体月份 → code.toLowerCase()+月份
@@ -652,7 +651,7 @@ const EASTMONEY_SYMBOL_MAP = {
   '甲醇':'115.mam', '玻璃':'115.fgm', '白糖':'115.srm', '纯碱':'115.sam',
   '烧碱':'115.shm', '尿素':'115.urm', '棉花':'115.cfm', '苹果':'115.apm', 'PTA':'115.tam', '菜油':'115.oim',
   // GFEX
-  '多晶硅':'8.psm', '工业硅':'8.sim', '碳酸锂':'8.lcm'
+  '多晶硅':'225.psm', '工业硅':'225.sim', '碳酸锂':'225.lcm'
 };
 
 // Sina Finance continuous contract mapping (备用 — 浏览器需 CORS 代理)
